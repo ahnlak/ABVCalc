@@ -1,0 +1,78 @@
+<html>
+  <head>
+    <title>ABV Calculator Test Bed</title>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+    <script src="//code.jquery.com/ui/1.10.4/jquery-ui.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.2/html5shiv.min.js"></script>
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/normalize/3.0.1/normalize.min.css">
+    <link rel="stylesheet" href="//code.jquery.com/ui/1.11.0/themes/smoothness/jquery-ui.css">
+    <link rel="stylesheet" href="/abv-calc.css">
+  </head>
+  <body>
+    <h1>ABV Calculator</h1>
+    <p>
+      This is a simple page to hold the ABV calculator. To use this in your
+      own pages, include the <i>petedrinks-abv-calculator</i> div and the
+      script / stylesheets as described in the README.md file.
+    </p>
+    <div id="petedrinks-abv-calculator">
+      <ul>
+        <li><a href="#pdac-hydro-calc">Hydrometer</a></li>
+        <li><a href="#pdac-refract-calc">Refractometer</a></li>
+      </ul>  
+      <div id="pdac-hydro-calc" class="pdac-calc-div">
+        <form id="pdac-hydro-form">
+          <label for="pdac-h-og">Original Gravity:</label>
+          <input id="pdac-h-og" name="pdac-h-og" type="text" />
+          <span id="pdac-h-calc-og" class="pdac-h-sg"></span>
+          <br />
+          <label for="pdac-h-fg">Final Gravity:</label>
+          <input id="pdac-h-fg" name="pdac-h-fg" type="text" />
+          <span id="pdac-h-calc-fg" class="pdac-h-sg"></span>
+          <br />
+          <label for="pdac-h-units">Units:</label>
+          <select id="pdac-h-units" name="pdac-h-units">
+            <option value="sg">Specific Gravity</option>
+            <option value="plato">Plato / Brix</option>
+          </select>
+          <hr />
+          <label for="pdac-h-result">ABV:</label>
+          <input id="pdac-h-result" name="pdac-h-result" value="-.-%" type="text" readonly="readonly" />
+        </form>
+        <div id="pdac-err" class="ui-state-error">sample error</div>
+      </div>
+      <div id="pdac-refract-calc" class="pdac-calc-div">
+        <form id="pdac-refract-form">
+          <label for="pdac-r-og">Measured Original Gravity:</label>
+          <input id="pdac-r-og" name="pdac-r-og" type="text" />
+          <span id="pdac-r-calc-og" class="pdac-r-sg"></span>
+          <br />
+          <label for="pdac-r-fg">Measured Final Gravity:</label>
+          <input id="pdac-r-fg" name="pdac-r-fg" type="text" />
+          <span id="pdac-r-calc-fg" class="pdac-r-sg"></span>
+          <br />
+          <label for="pdac-r-wc">Wort Correction Factor:</label>
+          <input id="pdac-r-wc" name="pdac-r-wc" type="text" value="1.04" />
+          <br />
+          <label for="pdac-r-units">Units:</label>
+          <select id="pdac-r-units" name="pdac-r-units">
+            <option value="brix">Brix</option>
+            <option value="sg">Specific Gravity</option>
+          </select>
+          <hr />
+          <label for="pdac-r-cog">Corrected Original Gravity:</label>
+          <input id="pdac-r-cog" name="pdac-r-cog" type="text" readonly="readonly" />
+          <span id="pdac-r-calc-cog" class="pdac-r-sg"></span>
+          <br />
+          <label for="pdac-r-cfg">Calculated Final Gravity:</label>
+          <input id="pdac-r-cfg" name="pdac-r-cfg" type="text" readonly="readonly" />
+          <span id="pdac-r-calc-cfg" class="pdac-r-sg"></span>
+          <br />
+          <label for="pdac-r-result">ABV:</label>
+          <input id="pdac-r-result" name="pdac-r-result" value="-.-%" type="text" readonly="readonly" />
+        </form>
+      </div>
+    </div>
+    <script src="/abv-calc.js"></script>
+  </body>
+</html>
