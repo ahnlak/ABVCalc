@@ -1,77 +1,106 @@
 <html>
   <head>
+    <meta content="width=device-width, initial-scale=1" name="viewport">
     <title>ABV Calculator Test Bed</title>
-    <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
-    <script src="//code.jquery.com/ui/1.10.4/jquery-ui.min.js"></script>
-    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.2/html5shiv.min.js"></script>
-    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/normalize/3.0.1/normalize.min.css">
-    <link rel="stylesheet" href="//code.jquery.com/ui/1.11.0/themes/smoothness/jquery-ui.css">
-    <link rel="stylesheet" href="/abv-calc.css">
+    <link rel="stylesheet" type="text/css" href="/abv-calc.css">
+    <link rel="stylesheet" type="text/css" href="/tiny-grid.min.css">
   </head>
   <body>
     <h1>ABV Calculator</h1>
     <p>
       This is a simple page to hold the ABV calculator. To use this in your
-      own pages, include the <i>petedrinks-abv-calculator</i> div and the
-      script / stylesheets as described in the README.md file.
+      own pages, include the <i>pdac_panel</i> div and the script/stylesheets
+      as described in the README.md file.
     </p>
-    <div id="petedrinks-abv-calculator">
-      <ul>
-        <li><a href="#pdac-hydro-calc">Hydrometer</a></li>
-        <li><a href="#pdac-refract-calc">Refractometer</a></li>
-      </ul>  
-      <div id="pdac-hydro-calc" class="pdac-calc-div">
-        <form id="pdac-hydro-form">
-          <label for="pdac-h-og">Original Gravity:</label>
-          <input id="pdac-h-og" name="pdac-h-og" type="text" />
-          <span id="pdac-h-calc-og" class="pdac-h-sg"></span>
-          <br />
-          <label for="pdac-h-fg">Final Gravity:</label>
-          <input id="pdac-h-fg" name="pdac-h-fg" type="text" />
-          <span id="pdac-h-calc-fg" class="pdac-h-sg"></span>
-          <br />
-          <label for="pdac-h-units">Units:</label>
-          <select id="pdac-h-units" name="pdac-h-units">
-            <option value="sg">Specific Gravity</option>
-            <option value="plato">Plato / Brix</option>
-          </select>
-          <hr />
-          <label for="pdac-h-result">ABV:</label>
-          <input id="pdac-h-result" name="pdac-h-result" value="-.-%" type="text" readonly="readonly" />
-        </form>
-        <div id="pdac-err" class="ui-state-error">sample error</div>
-      </div>
-      <div id="pdac-refract-calc" class="pdac-calc-div">
-        <form id="pdac-refract-form">
-          <label for="pdac-r-og">Measured Original Gravity:</label>
-          <input id="pdac-r-og" name="pdac-r-og" type="text" />
-          <span id="pdac-r-calc-og" class="pdac-r-sg"></span>
-          <br />
-          <label for="pdac-r-fg">Measured Final Gravity:</label>
-          <input id="pdac-r-fg" name="pdac-r-fg" type="text" />
-          <span id="pdac-r-calc-fg" class="pdac-r-sg"></span>
-          <br />
-          <label for="pdac-r-wc">Wort Correction Factor:</label>
-          <input id="pdac-r-wc" name="pdac-r-wc" type="text" value="1.04" />
-          <br />
-          <label for="pdac-r-units">Units:</label>
-          <select id="pdac-r-units" name="pdac-r-units">
-            <option value="brix">Brix</option>
-            <option value="sg">Specific Gravity</option>
-          </select>
-          <hr />
-          <label for="pdac-r-cog">Corrected Original Gravity:</label>
-          <input id="pdac-r-cog" name="pdac-r-cog" type="text" readonly="readonly" />
-          <span id="pdac-r-calc-cog" class="pdac-r-sg"></span>
-          <br />
-          <label for="pdac-r-cfg">Calculated Final Gravity:</label>
-          <input id="pdac-r-cfg" name="pdac-r-cfg" type="text" readonly="readonly" />
-          <span id="pdac-r-calc-cfg" class="pdac-r-sg"></span>
-          <br />
-          <label for="pdac-r-result">ABV:</label>
-          <input id="pdac-r-result" name="pdac-r-result" value="-.-%" type="text" readonly="readonly" />
-        </form>
-      </div>
+
+    <div class="pdac-panel pdac-container-fluid">
+      <form id="pdac">
+        <fieldset>
+          <legend>Readings</legend>
+          <div class="pdac-radio-group pdac-row">
+            <div class="pdac-col-6">
+              <input id="pdac-measured-hydro" name="pdac-reader" type="radio" value="H" checked="checked">
+              <label for="pdac-measured-hydro">Hydrometer</label>
+            </div>
+            <div class="pdac-col-6">
+              <input id="pdac-measured-refract" name="pdac-reader" type="radio" value="R">
+              <label for="pdac-measured-refract">Refractometer</label>
+            </div>
+          </div>
+          <div class="pdac-radio-group pdac-row">
+            <div class="pdac-col-6">
+              <input id="pdac-measured-sg" name="pdac-units" type="radio" value="SG" checked="checked">
+              <label for="pdac-measured-sg">Specific Gravity</label>
+            </div>
+            <div class="pdac-col-6">
+              <input id="pdac-measured-brix" name="pdac-units" type="radio" value="Brix">
+              <label for="pdac-measured-brix">Brix</label>
+            </div>
+          </div>
+          <div class="pdac-text-entry pdac-row">
+            <div class="label pdac-col-6">
+              <label for="pdac-measured-og">Original Gravity</label>
+            </div>
+            <div class="pdac-col-6">
+              <input id="pdac-measured-og" type="number" min="1.000" max="1.125" step="0.005" value="1.000">
+            </div>
+          </div>
+          <div class="pdac-err-row pdac-row">
+            <div id="pdac-measured-og-error" class="pdac-err"></div>
+          </div>
+          <div class="pdac-text-entry pdac-row">
+            <div class="label pdac-col-6">
+              <label for="pdac-measured-fg">Final Gravity</label>
+            </div>
+            <div class="pdac-col-6">
+              <input id="pdac-measured-fg" type="number" min="1.000" max="1.125" step="0.005" value="1.000">
+            </div>
+          </div>
+          <div class="pdac-err-row pdac-row">
+            <div id="pdac-measured-fg-error" class="pdac-err"></div>
+          </div>
+          <div id="pdac-wcf-row" class="pdac-text-entry pdac-wcf-row pdac-row">
+            <div class="label pdac-col-6">
+              <label for="pdac-wcf">Wort Correction</label>
+            </div>
+            <div class="pdac-col-6">
+              <input id="pdac-wcf" type="number" min="0.75" max="1.25" step="0.01" value="1.04">
+            </div>
+          </div>
+          <div class="pdac-err-row pdac-row">
+            <div id="pdac-wcf-error" class="pdac-err"></div>
+          </div>
+          </fieldset>
+        </fieldset>
+        <fieldset>
+          <legend>Calculations</legend>
+          <div id="pdac-err" class="pdac-err">error</div>
+          <div class="pdac-text-entry pdac-row">
+            <div class="label pdac-col-6">
+              <label for="pdac-calculated-og">Original Gravity</label>
+            </div>
+            <div class="pdac-col-6">
+              <input id="pdac-calculated-og" type="number" readonly value="1.000">
+            </div>
+          </div>
+          <div class="pdac-text-entry pdac-row">
+            <div class="label pdac-col-6">
+              <label for="pdac-calculated-fg">Final Gravity</label>
+            </div>
+            <div class="pdac-col-6">
+              <input id="pdac-calculated-fg" type="number" readonly value="1.000">
+            </div>
+          </div>
+          <div class="pdac-text-entry pdac-row">
+            <div class="label pdac-col-6">
+              <label for="pdac-calculated-abv">ABV</label>
+            </div>
+            <div class="pdac-col-6">
+              <input id="pdac-calculated-abv" readonly type="text">
+            </div>
+          </div>
+        </fieldset>
+      </form>
     </div>
     <script src="/abv-calc.js"></script>
   </body>

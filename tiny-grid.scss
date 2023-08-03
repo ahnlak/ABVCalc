@@ -1,0 +1,104 @@
+// Tiny Grid by @alexerlandsson
+// https://alexerlandsson.com
+
+// This is a CSS grid system used to build responsive websites
+// and applications. For documentation, check out the GitHub repository:
+// https://github.com/alexerlandsson/tiny-grid
+
+@use 'sass:math';
+
+@mixin tiny-grid {
+  // Settings
+  $grid-columns: 12 !default;
+  $grid-gutter: 20px !default;
+  $grid-container-max-width: 1470px !default;
+  $grid-container-gutter: 40px !default;
+
+  // To prefix all our output classes, add a prefix here
+  $grid-prefix: "pdac-";
+
+  $grid-breakpoints: (
+    sm: 600px,
+    md: 900px,
+    lg: 1200px,
+    xl: 1800px
+  ) !default;
+
+  // Container Elements
+  %container-base {
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+    padding-left: $grid-container-gutter;
+    padding-right: $grid-container-gutter;
+    box-sizing: border-box;
+  }
+
+  .#{$grid-prefix}container {
+    @extend %container-base;
+    max-width: $grid-container-max-width;
+  }
+
+  .#{$grid-prefix}container-fluid {
+    @extend %container-base;
+  }
+
+  .#{$grid-prefix}row {
+    margin-left: math.div($grid-gutter, -2);
+    margin-right: math.div($grid-gutter, -2);
+    box-sizing: border-box;
+    font-size: 0;
+
+    > * {
+      font-size: 1rem;
+    }
+  }
+
+  // Columns
+  [class^="#{$grid-prefix}col-"],
+  [class*=" #{$grid-prefix}col-"] {
+    display: inline-block;
+    vertical-align: top;
+    width: 100%;
+    min-height: 1px;
+    padding-left: math.div($grid-gutter, 2);
+    padding-right: math.div($grid-gutter, 2);
+    box-sizing: border-box;
+  }
+
+  // Create non-breakpoint specific columns and column offsets
+  @for $i from 1 through $grid-columns {
+    .#{$grid-prefix}col-#{$i} {
+      width: (math.div(100%, $grid-columns) * $i);
+    }
+    .#{$grid-prefix}col-offset-#{$i} {
+      margin-left: (math.div(100%, $grid-columns) * $i);
+    }
+  }
+
+  // Create breakpoint specific columns
+  @each $breakpoint-name in map-keys($grid-breakpoints) {
+    // Get each key's value
+    $breakpoint-width: map-get($grid-breakpoints, $breakpoint-name);
+
+    // Create media query for each breakpoint
+    @media (min-width: $breakpoint-width) {
+
+      // Add offset-0 to reset offset in specific breakpoints
+      .#{$grid-prefix}col-#{$breakpoint-name}-offset-0 {
+        margin-left: 0;
+      }
+
+      // Create columns and column offsets for each size in this breakpoint
+      @for $i from 1 through $grid-columns {
+        .#{$grid-prefix}col-#{$breakpoint-name}-#{$i} {
+          width: (math.div(100%, $grid-columns) * $i);
+        }
+        .#{$grid-prefix}col-#{$breakpoint-name}-offset-#{$i} {
+          margin-left: (math.div(100%, $grid-columns) * $i);
+        }
+      }
+    }
+  }
+}
+@include tiny-grid;

@@ -1,456 +1,365 @@
 /*
  * abv-calc.js - the actual logic begind ABVCalc.
  *
+ * This has been considerably re-factored to remove our dependency on jQuery
+ * and generally streamline things.
+ *
  * This file, along with the rest of the ABV Calculator, is licensed under
  * the MIT License - see the accompanying LICENSE file for more details.
  *
- * Copyright (C) 2014 Pete Favelle, pete@petedrinks.com
+ * Copyright (C) 2014, 2023 Pete Favelle, pete@petedrinks.com
  */
 
 // Wrap everything in a protective namespace, to hopefully avoid clashing 
 // with any other code being included.
 var PeteDrinksABVCalc = PeteDrinksABVCalc || {
 
-    // Internal variable to keep track of the div containing all our forms -
-    // this is so that we can run jQuery selectors in a more localised way,
-    // just in case there are name clashes elsewhere on the page.
-    mFormDiv: 0,
+    // Need to remember the current reader and unit options, so that we can
+    // spot when it changes.
+    mCurrentReader: 0,
+    mCurrentUnits: 0,
 
     // Init function; will identify the target div and attach appropriate
     // handlers to the fields.
     init: function() {
 
-        // Find the div to work on, save it for later
-        PeteDrinksABVCalc.mFormDiv = jQuery( "div#petedrinks-abv-calculator" );
+        // Initialise the current options
+        PeteDrinksABVCalc.mCurrentReader = document.querySelector( "input[name = 'pdac-reader']:checked" ).value;
+        PeteDrinksABVCalc.mCurrentUnits = document.querySelector( "input[name = 'pdac-units']:checked" ).value;
 
-        // Can only attach handlers if we found the div!
-        if ( PeteDrinksABVCalc.mFormDiv.length > 0 ) {
+        // Attach change handlers to inputs
+        document.getElementById( "pdac-measured-og" ).addEventListener( "change", function(){ PeteDrinksABVCalc.GravityChange(this) } );
+        document.getElementById( "pdac-measured-fg" ).addEventListener( "change", function(){ PeteDrinksABVCalc.GravityChange(this) } );
+        document.getElementById( "pdac-wcf" ).addEventListener( "change", function(){ PeteDrinksABVCalc.WCFChange(this) } );
 
-            // Activate the tabs
-            PeteDrinksABVCalc.mFormDiv.tabs();
-
-            // Set up our required handlers - hydrometer first
-            jQuery( "input#pdac-h-og", PeteDrinksABVCalc.mFormDiv ).change( PeteDrinksABVCalc.HydroOGChange );
-            jQuery( "input#pdac-h-fg", PeteDrinksABVCalc.mFormDiv ).change( PeteDrinksABVCalc.HydroFGChange );
-            jQuery( "select#pdac-h-units", PeteDrinksABVCalc.mFormDiv ).change( PeteDrinksABVCalc.HydroUnitChange );
-
-            // And now the equivalent refractometer ones
-            jQuery( "input#pdac-r-og", PeteDrinksABVCalc.mFormDiv ).change( PeteDrinksABVCalc.RefractOGChange );
-            jQuery( "input#pdac-r-fg", PeteDrinksABVCalc.mFormDiv ).change( PeteDrinksABVCalc.RefractFGChange );
-            jQuery( "input#pdac-r-wc", PeteDrinksABVCalc.mFormDiv ).change( PeteDrinksABVCalc.RefractWCChange );
-            jQuery( "select#pdac-r-units", PeteDrinksABVCalc.mFormDiv ).change( PeteDrinksABVCalc.RefractUnitChange );
+        let lUnitRadio = document.getElementsByName( "pdac-units" );
+        for ( let i = 0; i < lUnitRadio.length; i++ )
+        {
+            lUnitRadio[i].addEventListener( "click", function(){ PeteDrinksABVCalc.UnitChange(this) } );
+        }
+        let lReaderRadio = document.getElementsByName( "pdac-reader" );
+        for ( let i = 0; i < lReaderRadio.length; i++ )
+        {
+            lReaderRadio[i].addEventListener( "click", function(){ PeteDrinksABVCalc.ReaderChange(this) } );
         }
     },
 
-    // Handler for a new Hydrometer OG value
-    HydroOGChange: function() {
+    // Main calculation routine; called whenever things change
+    //
+    CalcABV: function() {
 
-        // Clear any errors
+        // First off, we try to work out the 'calculated' OG/FG - which depends
+        // on the device being used.
+        const lCalcOG = document.getElementById( "pdac-calculated-og" );
+        const lCalcFG = document.getElementById( "pdac-calculated-fg" );
+        const lABV = document.getElementById( "pdac-calculated-abv" );
+
+        // We'll potentially need Brix, if we need to apply refractometer fixes
+        let lBrixOG = 0;
+        let lBrixFG = 0;
+
+        // When units are SG, it's (probably) a straight copy
+        let lUnits = document.querySelector( "input[name = 'pdac-units']:checked" ).value;
+        if ( lUnits == "SG" )
+        {
+            lBrixOG = PeteDrinksABVCalc.ConvertSGToBrix( document.getElementById( "pdac-measured-og" ), false );
+            lBrixFG = PeteDrinksABVCalc.ConvertSGToBrix( document.getElementById( "pdac-measured-fg" ), false );
+
+            lCalcOG.value = Number.parseFloat( document.getElementById( "pdac-measured-og" ).value ).toFixed( 3 );
+            lCalcFG.value = Number.parseFloat( document.getElementById( "pdac-measured-fg" ).value ).toFixed( 3 );
+        }
+        else
+        {
+            lBrixOG = Number.parseFloat( document.getElementById( "pdac-measured-og" ).value );
+            lBrixFG = Number.parseFloat( document.getElementById( "pdac-measured-fg" ).value );
+
+            // The gravities are the same, but in SG
+            lCalcOG.value = PeteDrinksABVCalc.ConvertBrixToSG( document.getElementById( "pdac-measured-og" ), false ).toFixed( 3 );
+            lCalcFG.value = PeteDrinksABVCalc.ConvertBrixToSG( document.getElementById( "pdac-measured-fg" ), false ).toFixed( 3 );
+        }
+
+        // Now if we're using a refractometer there's more processing
+        let lReader = document.querySelector( "input[name = 'pdac-reader']:checked" ).value;
+        if ( lReader == "R" )
+        {
+            // Any wort correction needs to be applied to both OG and FG
+            let lWCF = Number.parseFloat( document.getElementById( "pdac-wcf" ).value );
+            lBrixOG = lBrixOG / lWCF;
+            lBrixFG = lBrixFG / lWCF;
+
+            // We'll need to update the calculated figures, then
+            lCalcOG.value = lBrixOG;
+            lCalcOG.value = PeteDrinksABVCalc.ConvertBrixToSG( lCalcOG, false ).toFixed( 3 );
+            lCalcFG.value = lBrixFG;
+            lCalcFG.value = PeteDrinksABVCalc.ConvertBrixToSG( lCalcFG, false ).toFixed( 3 );
+
+            // And the final gravity needs correcting
+            lCalcFG.value = ( 1.0000 - 0.0044993*lBrixOG + 0.011774*lBrixFG + 
+                              0.00027581*lBrixOG*lBrixOG - 0.0012717*lBrixFG*lBrixFG -
+                              0.0000072800*lBrixOG*lBrixOG*lBrixOG + 0.000063293*lBrixFG*lBrixFG*lBrixFG ).toFixed( 3 );
+        }
+
+        // Default to a blank ABV
+        lABV.value = "--.--%";
+
+        // Now, if we have good values, we can work out our ABV
+        if ( lCalcOG.value >= 1 && lCalcOG.value <= 1.125 &&
+             lCalcFG.value >= 1 && lCalcFG.value <= 1.125 )
+        {
+            lABV.value = ( ( 76.08 * ( lCalcOG.value - lCalcFG.value ) / ( 1.775 - lCalcOG.value ) ) * 
+                           ( lCalcFG.value / 0.794 ) ).toFixed( 2 ) + "%";
+        }
+
+    },
+
+    // Process the reader in use changing between Hydrometer and Refractometer
+    //
+    ReaderChange: function( pControl ) {
+
+        // Clear any outstanding error messages
         PeteDrinksABVCalc.ClearError();
 
-        // Need to know if we're in SG or Plato mode
-        var sg_mode = ( jQuery( "select#pdac-h-units", PeteDrinksABVCalc.mFormDiv ).val() == "sg" );
+        // We only need to do work if the units have actually changed
+        if ( pControl.value != PeteDrinksABVCalc.mCurrentReader )
+        {
+            // Refractometers (might) need Wort Correction Factors
+            if ( pControl.value == "R" )
+            {
+                document.getElementById( "pdac-wcf-row" ).style.display = "block";
+            }
+            else
+            {
+                document.getElementById( "pdac-wcf-row" ).style.display = "none";
+            }
 
-        // Normalise the value
-        var normalised;
-        var normalised_sg;
-        var final_sg;
-        if ( sg_mode ) {
-            normalised = PeteDrinksABVCalc.NormaliseSG( 
-                jQuery( "input#pdac-h-og", PeteDrinksABVCalc.mFormDiv ).val(),
-                jQuery( "input#pdac-h-og", PeteDrinksABVCalc.mFormDiv )
-            );
-            normalised_sg = normalised;
-            final_sg = jQuery( "input#pdac-h-fg", PeteDrinksABVCalc.mFormDiv ).val();
-        } else {
-            normalised = PeteDrinksABVCalc.NormalisePlato( 
-                jQuery( "input#pdac-h-og", PeteDrinksABVCalc.mFormDiv ).val(),
-                jQuery( "input#pdac-h-og", PeteDrinksABVCalc.mFormDiv )
-            );
-            normalised_sg = PeteDrinksABVCalc.PlatoToSG( normalised );
-            final_sg = PeteDrinksABVCalc.PlatoToSG( jQuery( "input#pdac-h-fg", PeteDrinksABVCalc.mFormDiv ).val() );
-            jQuery( "span#pdac-h-calc-og", PeteDrinksABVCalc.mFormDiv ).text( normalised_sg );
+            // And remember this new value.
+            PeteDrinksABVCalc.mCurrentReader = pControl.value;
         }
-        jQuery( "input#pdac-h-og", PeteDrinksABVCalc.mFormDiv ).val( normalised );
 
-        // And then see if we have values for both
-        if ( ( normalised_sg > 0 ) && ( final_sg > 0 ) ) {
-            jQuery( "input#pdac-h-result", PeteDrinksABVCalc.mFormDiv ).val( PeteDrinksABVCalc.SGToABV( normalised_sg, final_sg ) );
-        }
+        // Re-call the calculation routine; nothing *should* change, but...
+        PeteDrinksABVCalc.CalcABV();
+
     },
 
-    // Handler for a new Hydrometer FG value
-    HydroFGChange: function() {
+    // Processes the units of measure being changed between SG and Brix
+    //
+    UnitChange: function( pControl ) {
 
-        // Clear any errors
+        // Clear any outstanding error messages
         PeteDrinksABVCalc.ClearError();
 
-        // Need to know if we're in SG or Plato mode
-        var sg_mode = ( jQuery( "select#pdac-h-units", PeteDrinksABVCalc.mFormDiv ).val() == "sg" );
+        // We only need to do work if the units have actually changed
+        if ( pControl.value != PeteDrinksABVCalc.mCurrentUnits )
+        {
+            // Convert any input values automagically
+            if ( pControl.value == "Brix" )
+            {
+                PeteDrinksABVCalc.ConvertSGToBrix( document.getElementById( "pdac-measured-og" ), true );
+                PeteDrinksABVCalc.ConvertSGToBrix( document.getElementById( "pdac-measured-fg" ), true );
 
-        // Normalise the value
-        var normalised;
-        var original_sg;
-        var normalised_sg;
+            }
+            else
+            {
+                PeteDrinksABVCalc.ConvertBrixToSG( document.getElementById( "pdac-measured-og" ), true );
+                PeteDrinksABVCalc.ConvertBrixToSG( document.getElementById( "pdac-measured-fg" ), true );
+            }
+            // And then normalize it
+            PeteDrinksABVCalc.Normalize( document.getElementById( "pdac-measured-og" ) );
+            PeteDrinksABVCalc.Normalize( document.getElementById( "pdac-measured-fg" ) );
 
-        if ( sg_mode ) {
-            normalised = PeteDrinksABVCalc.NormaliseSG( 
-                jQuery( "input#pdac-h-fg", PeteDrinksABVCalc.mFormDiv ).val(),
-                jQuery( "input#pdac-h-fg", PeteDrinksABVCalc.mFormDiv )
-            );
-            original_sg = jQuery( "input#pdac-h-og", PeteDrinksABVCalc.mFormDiv ).val();
-            normalised_sg = normalised;
-        } else {
-            normalised = PeteDrinksABVCalc.NormalisePlato( 
-                jQuery( "input#pdac-h-fg", PeteDrinksABVCalc.mFormDiv ).val(),
-                jQuery( "input#pdac-h-fg", PeteDrinksABVCalc.mFormDiv )
-            );
-            original_sg = PeteDrinksABVCalc.PlatoToSG( jQuery( "input#pdac-h-og", PeteDrinksABVCalc.mFormDiv ).val() );
-            normalised_sg = PeteDrinksABVCalc.PlatoToSG( normalised );
-            jQuery( "span#pdac-h-calc-fg", PeteDrinksABVCalc.mFormDiv ).text( normalised_sg );
+            // And remember this new value.
+            PeteDrinksABVCalc.mCurrentUnits = pControl.value;
         }
-        jQuery( "input#pdac-h-fg", PeteDrinksABVCalc.mFormDiv ).val( normalised );
 
-        // And then see if we have values for both
-        if ( ( original_sg > 0 ) && ( normalised_sg > 0 ) ) {
-            jQuery( "input#pdac-h-result", PeteDrinksABVCalc.mFormDiv ).val( PeteDrinksABVCalc.SGToABV( original_sg, normalised_sg ) );
-        }
+        // Re-call the calculation routine; nothing *should* change, but...
+        PeteDrinksABVCalc.CalcABV();
+
     },
 
-    // Handler for changing hydrometer units
-    HydroUnitChange: function() {
+    // Conversion routines; to switch between SG and Brix
+    //
+    ConvertSGToBrix: function( pControl, pSet ) {
 
-        // Clear any errors
-        PeteDrinksABVCalc.ClearError();
-        var original_sg;
-        var final_sg;
+        let lConvertedValue = 0;
 
-        if ( jQuery( "select#pdac-h-units", PeteDrinksABVCalc.mFormDiv ).val() == "sg" ) {
-            // Convert any existing Plato to SG
-            var original_plato = jQuery( "input#pdac-h-og", PeteDrinksABVCalc.mFormDiv ).val();
-            var final_plato = jQuery( "input#pdac-h-fg", PeteDrinksABVCalc.mFormDiv ).val();
-            if ( original_plato > 0 ) {
-                original_sg = PeteDrinksABVCalc.PlatoToSG( original_plato );
-                jQuery( "input#pdac-h-og", PeteDrinksABVCalc.mFormDiv ).val( original_sg );
+        // Sanity check; only convert if it looks like a valid SG
+        if ( pControl.value >= 1 && pControl.value <= 1.125 )
+        {
+            // Calculate the new value
+            lConvertedValue = ( 135.997 * pControl.value * pControl.value * pControl.value ) -
+                              ( 630.272 * pControl.value * pControl.value ) +
+                              ( 1111.14 * pControl.value ) -
+                              616.868;
+
+            // Cap it to zero
+            if ( lConvertedValue < 0 )
+            {
+                lConvertedValue = 0;
             }
-            if ( final_plato > 0 ) {
-                final_sg = PeteDrinksABVCalc.PlatoToSG( final_plato );
-                jQuery( "input#pdac-h-fg", PeteDrinksABVCalc.mFormDiv ).val( final_sg );
-            }
-            jQuery( "span.pdac-h-sg", PeteDrinksABVCalc.mFormDiv ).hide();
-        } else {
-            // Convert any existing SG to Plato 
-            original_sg = jQuery( "input#pdac-h-og", PeteDrinksABVCalc.mFormDiv ).val();
-            final_sg = jQuery( "input#pdac-h-fg", PeteDrinksABVCalc.mFormDiv ).val();
-            if ( original_sg > 0 ) {
-                jQuery( "span#pdac-h-calc-og", PeteDrinksABVCalc.mFormDiv ).text( original_sg );
-                jQuery( "input#pdac-h-og", PeteDrinksABVCalc.mFormDiv ).val( PeteDrinksABVCalc.SGToPlato( original_sg ) );
-            }
-            if ( final_sg > 0 ) {
-                jQuery( "span#pdac-h-calc-fg", PeteDrinksABVCalc.mFormDiv ).text( final_sg );
-                jQuery( "input#pdac-h-fg", PeteDrinksABVCalc.mFormDiv ).val( PeteDrinksABVCalc.SGToPlato( final_sg ) );
-            }
-            jQuery( "span.pdac-h-sg", PeteDrinksABVCalc.mFormDiv ).show();
         }
 
-        // And then see if we have values for both
-        if ( ( original_sg > 0 ) && ( final_sg > 0 ) ) {
-            jQuery( "input#pdac-h-result", PeteDrinksABVCalc.mFormDiv ).val( PeteDrinksABVCalc.SGToABV( original_sg, final_sg ) );
+        // If requested, set the control value to this
+        if ( pSet )
+        {
+            pControl.value = lConvertedValue;
         }
+
+        return lConvertedValue;
+
     },
 
-    // Handler for changing the refractor original gravity
-    RefractOGChange: function() {
+    ConvertBrixToSG: function( pControl, pSet ) {
 
-        // Clear any errors
-        PeteDrinksABVCalc.ClearError();
+        let lConvertedValue = 0;
 
-        var sg_mode = ( jQuery( "select#pdac-r-units", PeteDrinksABVCalc.mFormDiv ).val() == "sg" );
-
-        // Normalise the value
-        var normalised;
-        var normalised_brix;
-        var final_brix;
-        var wcf;
-        if ( sg_mode ) {
-            normalised = PeteDrinksABVCalc.NormaliseSG( 
-                jQuery( "input#pdac-r-og", PeteDrinksABVCalc.mFormDiv ).val(),
-                jQuery( "input#pdac-r-og", PeteDrinksABVCalc.mFormDiv )
-            );
-            normalised_brix = PeteDrinksABVCalc.SGToPlato( normalised );
-            final_brix = PeteDrinksABVCalc.SGToPlato( jQuery( "input#pdac-r-fg", PeteDrinksABVCalc.mFormDiv ).val() );
-        } else {
-            normalised = PeteDrinksABVCalc.NormalisePlato( 
-                jQuery( "input#pdac-r-og", PeteDrinksABVCalc.mFormDiv ).val(),
-                jQuery( "input#pdac-r-og", PeteDrinksABVCalc.mFormDiv )
-            );
-            jQuery( "span#pdac-r-calc-og", PeteDrinksABVCalc.mFormDiv ).text( PeteDrinksABVCalc.PlatoToSG( normalised ) );
-            normalised_brix = normalised;
-            final_brix = jQuery( "input#pdac-r-fg", PeteDrinksABVCalc.mFormDiv ).val();
+        // Sanity check; only convert if it looks like a valid Brix
+        if ( pControl.value >= 0 && pControl.value <= 30 )
+        {
+            // Calculate the new value
+            lConvertedValue = 1.0 + ( pControl.value / ( 258.6 - ( ( pControl.value / 258.2 ) * 227.1 ) ) );
         }
-        wcf = jQuery( "input#pdac-r-wc", PeteDrinksABVCalc.mFormDiv ).val();
-        jQuery( "input#pdac-r-og", PeteDrinksABVCalc.mFormDiv ).val( normalised );
 
-        // Attempt to calculate anything we can
-        PeteDrinksABVCalc.RefractCalc( normalised_brix, final_brix, wcf );
+        // If requested, set the control value to this
+        if ( pSet )
+        {
+            pControl.value = lConvertedValue;
+        }
+
+        return lConvertedValue;
+
     },
 
-    // Handler for changing the refractor final gravity
-    RefractFGChange: function() {
+    // Handle changes in the Original/Final Gravity fields
+    //
+    GravityChange: function( pControl ) {
 
-        // Clear any errors
+        // Clear any outstanding error messages
         PeteDrinksABVCalc.ClearError();
 
-        var sg_mode = ( jQuery( "select#pdac-r-units", PeteDrinksABVCalc.mFormDiv ).val() == "sg" );
+        // First step, normalize the entered value taking into account the units
+        // we're working in.
+        PeteDrinksABVCalc.Normalize( pControl );
 
-        // Normalise the value
-        var normalised;
-        var normalised_brix;
-        var original_brix;
-        var wcf;
-        if ( sg_mode ) {
-            normalised = PeteDrinksABVCalc.NormaliseSG( 
-                jQuery( "input#pdac-r-fg", PeteDrinksABVCalc.mFormDiv ).val(),
-                jQuery( "input#pdac-r-fg", PeteDrinksABVCalc.mFormDiv )
-            );
-            normalised_brix = PeteDrinksABVCalc.SGToPlato( normalised );
-            original_brix = PeteDrinksABVCalc.SGToPlato( jQuery( "input#pdac-r-og", PeteDrinksABVCalc.mFormDiv ).val() );
-        } else {
-            normalised = PeteDrinksABVCalc.NormalisePlato( 
-                jQuery( "input#pdac-r-fg", PeteDrinksABVCalc.mFormDiv ).val(),
-                jQuery( "input#pdac-r-fg", PeteDrinksABVCalc.mFormDiv )
-            );
-            jQuery( "span#pdac-r-calc-fg", PeteDrinksABVCalc.mFormDiv ).text( PeteDrinksABVCalc.PlatoToSG( normalised ) );
-            normalised_brix = normalised;
-            original_brix = jQuery( "input#pdac-r-og", PeteDrinksABVCalc.mFormDiv ).val();
-        }
-        wcf = jQuery( "input#pdac-r-wc", PeteDrinksABVCalc.mFormDiv ).val();
-        jQuery( "input#pdac-r-fg", PeteDrinksABVCalc.mFormDiv ).val( normalised );
-
-        // Attempt to calculate anything we can
-        PeteDrinksABVCalc.RefractCalc( original_brix, normalised_brix, wcf );
+        // And then call the main calculation routine to do the maths!
+        PeteDrinksABVCalc.CalcABV();
     },
 
-    // Handler for changing the refractor wort correction factor
-    RefractWCChange: function() {
+    // And handle the Wort Correction Factor changing, too
+    //
+    WCFChange: function( pControl ) {
 
-        // Clear any errors
+        // Clear any outstanding error messages
         PeteDrinksABVCalc.ClearError();
 
-        var sg_mode = ( jQuery( "select#pdac-r-units", PeteDrinksABVCalc.mFormDiv ).val() == "sg" );
-
-        // Check that the WCF is vaguely sensible (say 0.5 < wcf < 1.5)
-        var wcf = Number( jQuery( "input#pdac-r-wc", PeteDrinksABVCalc.mFormDiv ).val() );
-        if ( ( wcf < 0.5 ) || ( wcf > 1.5 ) ) {
-            PeteDrinksABVCalc.Error( "Invalid Wort Correction Factor provided<br>Please enter values 0.50-1.50" );
-            jQuery( "input#pdac-r-wc", PeteDrinksABVCalc.mFormDiv ).focus();
-            return;
+        // Clamp the entered value to something moderately sensible
+        if ( pControl.value < 0.75 )
+        {
+            PeteDrinksABVCalc.Error( "WCF cannot be below 0.75", pControl.id + "-error" );
+            pControl.value = 0.75;
+        }
+        if ( pControl.value > 1.25 )
+        {
+            PeteDrinksABVCalc.Error( "WCF cannot be above 1.25", pControl.id + "-error" );
+            pControl.value = 1.25;
         }
 
-        // Get the original/final gravities
-        var original_brix;
-        var final_brix;
-        if ( sg_mode ) {
-            original_brix = PeteDrinksABVCalc.SGToPlato( jQuery( "input#pdac-r-og", PeteDrinksABVCalc.mFormDiv ).val() );
-            final_brix = PeteDrinksABVCalc.SGToPlato( jQuery( "input#pdac-r-fg", PeteDrinksABVCalc.mFormDiv ).val() );
-        } else {
-            original_brix = jQuery( "input#pdac-r-og", PeteDrinksABVCalc.mFormDiv ).val();
-            final_brix = jQuery( "input#pdac-r-fg", PeteDrinksABVCalc.mFormDiv ).val();
-        }
+        // Lastly, ensure it's to the right precision
+        pControl.value = Number.parseFloat( pControl.value ).toFixed( 2 );
 
-        // Attempt to calculate anything we can
-        PeteDrinksABVCalc.RefractCalc( original_brix, final_brix, wcf );
+        // And then call the main calculation routine to do the maths!
+        PeteDrinksABVCalc.CalcABV();
+
     },
 
-    // Handler for changing the refractor units
-    RefractUnitChange: function() {
+    // Normalise a Gravity field, taking into account what units we use
+    //
+    Normalize: function( pControl ) {
 
-        // Clear any errors
-        PeteDrinksABVCalc.ClearError();
-        var original_brix;
-        var final_brix;
-        var wcf = jQuery( "input#pdac-r-wc", PeteDrinksABVCalc.mFormDiv ).val();
+        // So, what mode are we in - Specific Gravity, or Brix?
+        let lUnits = document.querySelector( "input[name = 'pdac-units']:checked" ).value;
 
-        if ( jQuery( "select#pdac-r-units", PeteDrinksABVCalc.mFormDiv ).val() == "sg" ) {
-            // Convert any existing brix to SG
-            original_brix = jQuery( "input#pdac-r-og", PeteDrinksABVCalc.mFormDiv ).val();
-            final_brix = jQuery( "input#pdac-r-fg", PeteDrinksABVCalc.mFormDiv ).val();
-            if ( original_brix > 0 ) {
-                original_sg = PeteDrinksABVCalc.PlatoToSG( original_brix );
-                jQuery( "input#pdac-r-og", PeteDrinksABVCalc.mFormDiv ).val( original_sg );
+        // The ranges vary, obviously.
+        if ( lUnits == "SG" )
+        {
+            // If the user has keyed a four digit value, assume the decimal
+            if ( pControl.value > 999 && pControl.value < 1125 )
+            {
+                pControl.value = pControl.value / 1000;
             }
-            if ( final_brix > 0 ) {
-                final_sg = PeteDrinksABVCalc.PlatoToSG( final_brix );
-                jQuery( "input#pdac-r-fg", PeteDrinksABVCalc.mFormDiv ).val( final_sg );
-            }
-            jQuery( "span.pdac-r-sg", PeteDrinksABVCalc.mFormDiv ).hide();
 
-            // If the WCF hasn't been changed from the default, switch it
-            if ( wcf == 1.04 ) {
-                wcf = 1.0;
-                jQuery( "input#pdac-r-wc", PeteDrinksABVCalc.mFormDiv ).val( wcf );
+            // Needs to be between 1 and 1.25 (any higher and things get messy)
+            if ( pControl.value < 1 )
+            {
+                PeteDrinksABVCalc.Error( "Input gravity cannot be below 1", pControl.id + "-error" );
+                pControl.value = 1;
             }
-        } else {
-            // Convert any existing SG to Brix
-            original_sg = jQuery( "input#pdac-r-og", PeteDrinksABVCalc.mFormDiv ).val();
-            final_sg = jQuery( "input#pdac-r-fg", PeteDrinksABVCalc.mFormDiv ).val();
-            if ( original_sg > 0 ) {
-                original_brix = PeteDrinksABVCalc.SGToPlato( original_sg );
-                jQuery( "span#pdac-r-calc-og", PeteDrinksABVCalc.mFormDiv ).text( original_sg );
-                jQuery( "input#pdac-r-og", PeteDrinksABVCalc.mFormDiv ).val( original_brix );
+            if ( pControl.value > 1.125 )
+            {
+                PeteDrinksABVCalc.Error( "Input gravity cannot exceed 1.125", pControl.id + "-error" );
+                pControl.value = 1.125;
             }
-            if ( final_sg > 0 ) {
-                final_brix = PeteDrinksABVCalc.SGToPlato( final_sg );
-                jQuery( "span#pdac-r-calc-fg", PeteDrinksABVCalc.mFormDiv ).text( final_sg );
-                jQuery( "input#pdac-r-fg", PeteDrinksABVCalc.mFormDiv ).val( final_brix );
-            }
-            jQuery( "span.pdac-r-sg", PeteDrinksABVCalc.mFormDiv ).show();
 
-            // If the WCF hasn't been changed from the default, switch it
-            if ( wcf == 1.0 ) {
-                wcf = 1.04;
-                jQuery( "input#pdac-r-wc", PeteDrinksABVCalc.mFormDiv ).val( wcf );
-            }
+            // Lastly, ensure it's to the right precision
+            pControl.value = Number.parseFloat( pControl.value ).toFixed( 3 );
         }
-
-        // Attempt to calculate anything we can
-        PeteDrinksABVCalc.RefractCalc( original_brix, final_brix, wcf );
-    },
-
-    // Perform all the calculations for refractometer stuff
-    RefractCalc: function( original_brix, final_brix, wcf ) {
-
-        var corrected_og = 0;
-        var corrected_fg = 0;
-        var calc_fg = 0;
-        var sg_mode = ( jQuery( "select#pdac-r-units", PeteDrinksABVCalc.mFormDiv ).val() == "sg" );
-
-        // If we have OG figures, perform that calculation
-        if ( ( original_brix > 0 ) && ( wcf > 0 ) ) {
-            corrected_og = PeteDrinksABVCalc.WortCorrect( original_brix, wcf );
-            if ( sg_mode ) {
-                jQuery( "input#pdac-r-cog", PeteDrinksABVCalc.mFormDiv ).val( PeteDrinksABVCalc.PlatoToSG( corrected_og ) );
-            } else {
-                jQuery( "input#pdac-r-cog", PeteDrinksABVCalc.mFormDiv ).val( PeteDrinksABVCalc.NormalisePlato( corrected_og ) );
-                jQuery( "span#pdac-r-calc-cog", PeteDrinksABVCalc.mFormDiv ).text( PeteDrinksABVCalc.PlatoToSG( corrected_og ) );
+        else
+        {
+            // Brix are a little easier, need to be between 0 and 30
+            if ( pControl.value < 0 )
+            {
+                PeteDrinksABVCalc.Error( "Input brix cannot be below 0", pControl.id + "-error" );
+                pControl.value = 0;
+            }
+            if ( pControl.value > 30 )
+            {
+                PeteDrinksABVCalc.Error( "Input brix cannot exceed 30.0", pControl.id + "-error" );
+                pControl.value = 30;
             }
 
-            // Ditto to the FG figures
-            if ( final_brix > 0 ) {
-                corrected_fg = PeteDrinksABVCalc.WortCorrect( final_brix, wcf );
-                calc_fg = PeteDrinksABVCalc.RefractFinal( corrected_og, corrected_fg );
-                if ( sg_mode ) {
-                    jQuery( "input#pdac-r-cfg", PeteDrinksABVCalc.mFormDiv ).val( calc_fg );
-                } else {
-                    jQuery( "input#pdac-r-cfg", PeteDrinksABVCalc.mFormDiv ).val( PeteDrinksABVCalc.SGToPlato( calc_fg ) );
-                    jQuery( "span#pdac-r-calc-cfg", PeteDrinksABVCalc.mFormDiv ).text( calc_fg );
-                }
-
-                // And if we have both, do the ABV sums too!
-                jQuery( "input#pdac-r-result", PeteDrinksABVCalc.mFormDiv ).val( 
-                    PeteDrinksABVCalc.SGToABV( 
-                        PeteDrinksABVCalc.PlatoToSG( corrected_og ), calc_fg
-                    ) 
-                );
-            }
+            // Lastly, ensure it's to the right precision
+            pControl.value = Number.parseFloat( pControl.value ).toFixed( 1 );
         }
     },
 
-    // Convert from Plato to SG
-    PlatoToSG: function( plato ) {
-        var result = 1.0 + ( plato / ( 258.6 - ( ( plato / 258.2 ) * 227.1 ) ) );
-        return PeteDrinksABVCalc.NormaliseSG( result );
-    },
+    // Show an error message; if no location provided, use the default
+    //
+    Error: function( pErrorText, pErrorDiv = "pdac-err" ) {
 
-    // Convert from SG to Plato
-    SGToPlato: function( sg ) {
-        var result = -616.868 + ( 1111.14 * sg ) - ( 630.272 * sg * sg ) + ( 135.997 * sg * sg * sg );
-        return PeteDrinksABVCalc.NormalisePlato( result );
-    },
+        // Find the location to put the error.
+        let lErrorDiv = document.getElementById( pErrorDiv );
 
-    // Convert all manner of versions of SG to something normal
-    NormaliseSG: function( sg, field ) {
-        var sg_val = Number( sg );
-        var ret_val = sg_val;
-
-        // Process the different formats folks might use
-        if ( sg_val > 1000 ) {
-            // Simple SGs without a decimal point
-            ret_val = ( sg_val / 1000.0 ).toFixed(3);
-        } else if ( sg_val > 2 ) {
-            // Also need to handle brewer's points
-            ret_val = ( 1 + ( sg_val / 1000.0 ) ).toFixed(3);
-        } else if ( sg_val > 1 ) {
-            // Sounds like the 1.nnn form then
-            ret_val = sg_val.toFixed(3);
-        } else {
-            // Some sort of invalid format that we can't make sense of; if we can, tell them
-            if ( field != undefined ) {
-                PeteDrinksABVCalc.Error( "Invalid Specific Gravity provided<br>Please enter values 1.001-1.999" );
-                field.focus();
-                ret_val = sg;
-            }
+        // If the error box is a row, wrap it in an internal div
+        if ( lErrorDiv.classList.contains( "row" ) )
+        {
+            lErrorDiv.innerHTML = "<div>" + pErrorText + "</div>";
         }
-        return ret_val;
-    },
-
-    // Do a similar job for odd Plato formats
-    NormalisePlato: function( plato, field ) {
-        var plato_val = Number( plato );
-
-        // Just need to sanity check; plato *really* needs to be between 1 and 100!
-        if ( ( ( plato_val < 1 ) || ( plato_val > 99 ) ) && ( field != undefined ) ) {
-            PeteDrinksABVCalc.Error( "Invalid Brix provided<br>Please enter values 1-99" );
-            field.focus();
-            return plato;
+        else
+        {
+            lErrorDiv.innerHTML = pErrorText;
         }
 
-        return plato_val.toFixed(1);
+        // And make it visible
+        lErrorDiv.style.display = "block";
     },
 
-    // Calculate ABV
-    SGToABV: function( sg, fg ) {
-        // First off, we need the difference
-        var diff = sg - fg;
-
-        // Check that the figures are the right way aroundf
-        if ( diff < 0 ) {
-            PeteDrinksABVCalc.Error( "Final Gravity must be lower than Original!" );
-            return "-.-%";
-        }
-
-        // Use the more complex (and more accurate) formula
-        // ABV =(76.08 * (og-fg) / (1.775-og)) * (fg / 0.794)
-        var abv = ( 76.08 * ( sg - fg ) / ( 1.775 - sg ) ) * ( fg / 0.794 );
-        return abv.toFixed( 2 ) + "%";
-    },
-
-    // Generate a corrected OG from an initial Brix refractometer reading
-    WortCorrect: function( brix, wcf ) {
-        return brix / wcf;
-    },
-
-    // Generate a final gravity, given start and end Brix refractometer figures
-    // Uses the following rather horrific calculation:
-    // FG = 1.0000 - 0.0044993*RIi + 0.011774*RIf + 0.00027581*RIi^2 - 0.0012717*RIf^2 - 0.0000072800*RIi^3 + 0.000063293*RIf^3
-    RefractFinal: function( obrix, fbrix ) {
-        var final = 1.000 - ( 0.004493 * obrix ) + ( 0.011774 * fbrix )
-                  + ( 0.00027581 * obrix * obrix ) - ( 0.0012717 * fbrix * fbrix )
-                  - ( 0.00000728 * obrix * obrix * obrix ) + ( 0.000063293 * fbrix * fbrix * fbrix );
-        return final.toFixed(3);
-    },
-
-    // Error reporting; best to tell the user when something's up!
-    Error: function( errmsg ) {
-        jQuery( "div#pdac-err", PeteDrinksABVCalc.mFormDiv ).html( errmsg );
-        jQuery( "div#pdac-err", PeteDrinksABVCalc.mFormDiv ).show();
-    },
-
+    // Clear all error messages; identified by the 'pdac-err' class
     ClearError: function() {
-        jQuery( "div#pdac-err", PeteDrinksABVCalc.mFormDiv ).hide();
+        let lErrorDivs = document.getElementsByClassName( "pdac-err" );
+        for ( let i = 0; i < lErrorDivs.length; i++ )
+        {
+            lErrorDivs[i].style.display = "none";
+        }
     }
+
 }
 
-jQuery( document ).ready( function() {
+// A jQuery-free ready function
+if ( document.attachEvent ? document.readyState === 'complete'
+                          : document.readyState !== 'loading' )
+{
     PeteDrinksABVCalc.init();
-});
+}
+else
+{
+    document.addEventListener( 'DOMContentLoaded', PeteDrinksABVCalc.init );
+}

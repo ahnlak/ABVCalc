@@ -1,39 +1,97 @@
 /*
  * abv-calc.css - additional styles required by the ABV calculator form.
  *
+ * These styles have all been re-worked to be a lot more user-friendly and
+ * responsive, at the same time as getting away from using jQueryUI just to
+ * look pretty.
+ *
  * This file, along with the rest of the ABV Calculator, is licensed under
  * the MIT License - see the accompanying LICENSE file for more details.
  *
- * Copyright (C) 2014 Pete Favelle, pete@petedrinks.com
+ * Copyright (C) 2014, 2023 Pete Favelle, pete@petedrinks.com
  */
 
-#petedrinks-abv-calculator {
-    width: 500px;
-    font-size: 85%;
+.pdac-panel
+{
+    width: 90%;
+    min-width: 325px;
+    max-width: 700px;
+    border: solid 1px #000;
+    margin: auto 1rem;
+    padding: 1rem;
+    font-size: 1.2rem;
 }
 
-#petedrinks-abv-calculator form {
-    margin-bottom: 0;
+.pdac-radio-group
+{
+    margin: 0;
+    padding: 0.5rem 0;
+    border: none;
 }
 
-#petedrinks-abv-calculator label {
+.pdac-radio-group input
+{
+    display: none;
+}
+
+.pdac-radio-group input + label
+{
+    background: #fff;
+    color: #000;
+    border: solid 1px #ccc;
+    border-radius: 5px;
+    padding: 0.5rem 0;
+    width: 100%;
     display: inline-block;
-    width: 45%;
-    padding-bottom: 10px;
+    text-align: center;
+    box-sizing: border-box;
 }
 
-#petedrinks-abv-calculator input,
-#petedrinks-abv-calculator select,
-#petedrinks-abv-calculator button {
-    width: 40%;
+.pdac-radio-group input:hover + label
+{
+    border: solid 1px #000;
 }
 
-#petedrinks-abv-calculator input {
+.pdac-radio-group input:checked + label
+{
+    background: #666;
+    color: #fff;
+}
+
+.pdac-text-entry div
+{
+    padding: 0.5rem;
+}
+
+.pdac-text-entry .label
+{
+    margin: 0.5rem 0;
     text-align: right;
 }
 
-#petedrinks-abv-calculator #pdac-err {
-    display: none;
-    padding: 5px;
+.pdac-text-entry input
+{
+    padding: 0.5rem;
+    border: solid 1px #ccc;
+    border-radius: 5px;
+    width: 100%;
+    text-align: right;
+}
+
+.pdac-err
+{
+    color: #f00;
+    border: solid 1px #f00;
+    border-radius: 5px;
+    padding: 0.5rem;
+    margin: 0.5rem;
     text-align: center;
+    font-weight: bold;
+    font-size: 1.1rem;
+    display: none;
+}
+
+.pdac-wcf-row 
+{
+    display: none;
 }
